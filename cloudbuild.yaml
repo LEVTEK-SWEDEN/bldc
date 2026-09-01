@@ -1,0 +1,51 @@
+steps:
+  # Install the pinned ARM toolchain (make/tools.mk owns the version) and build
+  # the firmware for the LEVTEK board. The toolchain is installed via
+  # `make arm_sdk_install` rather than apt so CI uses the exact same compiler
+  # version as developer machines.
+  - name: 'ubuntu:22.04'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        apt-get update -qq
+        apt-get install -y --no-install-recommends ca-certificates make git wget xz-utils python3
+        make arm_sdk_install
+        make fw_${_BOARD}
+
+  # Upload build/<board>/<board>.bin to Artifact Registry.
+  # Branch builds go to levtek-binary; tag builds go to levtek-binary-release.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        if [ -n "$TAG_NAME" ]; then
+          REPO=levtek-binary-release
+          VERSION=$TAG_NAME
+        else
+          REPO=levtek-binary
+          SHA=$COMMIT_SHA
+          SAFE_BRANCH=$(echo "$BRANCH_NAME" | tr '/_' '--')
+          VERSION=$${SAFE_BRANCH}-$${SHA:0:11}
+        fi
+        gcloud artifacts generic upload \
+          --project=$PROJECT_ID \
+          --location=${_LOCATION} \
+          --repository=$$REPO \
+          --package=${_PACKAGE} \
+          --version=$$VERSION \
+          --source=build/${_BOARD}/${_BOARD}.bin
+
+serviceAccount: 'projects/levtek-infrastructure/serviceAccounts/cloudbuild-ci@levtek-infrastructure.iam.gserviceaccount.com'
+
+substitutions:
+  _LOCATION: europe-west4
+  _BOARD: levtek_1_0_3
+  _PACKAGE: levkart-esc-firmware
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
