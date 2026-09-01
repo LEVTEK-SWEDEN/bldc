@@ -56,7 +56,9 @@
 #define SENSOR_VOLTAGE_GPIO		GPIOC
 #define SENSOR_VOLTAGE_PIN		14
 
-#define SENSOR_PORT_5V()		palSetPad(SENSOR_VOLTAGE_GPIO, SENSOR_VOLTAGE_PIN)
+//#define SENSOR_PORT_5V()		palSetPad(SENSOR_VOLTAGE_GPIO, SENSOR_VOLTAGE_PIN)
+// Disable 5V sensor port to avoid damaging encoders
+#define SENSOR_PORT_5V()		palClearPad(SENSOR_VOLTAGE_GPIO, SENSOR_VOLTAGE_PIN)
 #define SENSOR_PORT_3V3()		palClearPad(SENSOR_VOLTAGE_GPIO, SENSOR_VOLTAGE_PIN)
 
 // Shutdown pin
@@ -323,4 +325,4 @@
 // Functions
 bool hw_sample_shutdown_button(void);
 
-#endif /* HW_LEVTEK_CORE_H_ */
+#endif /* HW_60_CORE_H_ */
