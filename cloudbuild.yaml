@@ -3,6 +3,11 @@ steps:
   # the firmware for the LEVTEK board. The toolchain is installed via
   # `make arm_sdk_install` rather than apt so CI uses the exact same compiler
   # version as developer machines.
+  #
+  # Both xz-utils and bzip2 are installed because the toolchain archive format
+  # differs per branch: master pins 14.3.rel1 (.tar.xz), release_7_00 pins
+  # gcc-arm-none-eabi 7-2018-q2 (.tar.bz2). Keeping both means one file works
+  # unchanged on either branch.
   - name: 'ubuntu:22.04'
     entrypoint: 'bash'
     args:
@@ -10,7 +15,7 @@ steps:
       - |
         set -e
         apt-get update -qq
-        apt-get install -y --no-install-recommends ca-certificates make git wget xz-utils python3
+        apt-get install -y --no-install-recommends ca-certificates make git wget xz-utils bzip2 python3
         make arm_sdk_install
         make fw_${_BOARD}
 
