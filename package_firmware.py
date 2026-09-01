@@ -232,6 +232,7 @@ package_dict["Maxim_120_PH"] = [['maxim_120_ph', default_name],
                     ['maxim_120_ph_no_limits', no_limits_name]]
 package_dict["Maxim_150_PH"] = [['maxim_150_ph', default_name],
                     ['maxim_150_ph_no_limits', no_limits_name]]
+package_dict["LEVTEK"] = [['levtek_1_0_3', default_name]]
 
 # When the argument make_targets is passed print all make targets from the
 # dictianary. The output of this command can be used as arguments to make to
