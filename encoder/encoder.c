@@ -813,31 +813,53 @@ void encoder_check_faults(volatile mc_configuration *m_conf, bool is_second_moto
 		// Mechanical slip detection: Compare the FOC observer phase against the physical
 		// encoder phase. If the motor is spinning fast enough for a stable observer
 		// estimate (>110% of open-loop threshold) and the phase gap exceeds 15 degrees
-		// for more than 500ms, trigger a LOOSE_MAGNET fault.
+		// for more than 500ms, or 90 degrees for more than 50ms, trigger an
+		// ENCODER_SLIP fault.
+		static systime_t fault_start_time[2] = {0, 0};
+		static systime_t big_fault_start_time[2] = {0, 0};
+		int mtr = is_second_motor ? 1 : 0;
+
 		if (m_conf->l_additional_faults & 1) {
 			float current_rpm = mc_interface_get_rpm();
 			float ol_erpm = m_conf->foc_openloop_rpm;
 			float stable_observer_threshold = ol_erpm * 1.1f;
-			static systime_t fault_start_time = 0;
+
 			if (fabsf(current_rpm) > stable_observer_threshold) {
 				float obs = mcpwm_foc_get_phase_observer();
 				float enc = mcpwm_foc_get_phase_encoder();
 				float gap = fabsf(utils_angle_difference(obs, enc));
 				if (gap > 15.0f) {
-					if (fault_start_time == 0){
-						fault_start_time = chVTGetSystemTime();
+					if (fault_start_time[mtr] == 0){
+						fault_start_time[mtr] = chVTGetSystemTime();
 					}
-					uint32_t elapsed_ms = ST2MS(chVTTimeElapsedSinceX(fault_start_time));
+					uint32_t elapsed_ms = ST2MS(chVTTimeElapsedSinceX(fault_start_time[mtr]));
 					if (elapsed_ms > 500) {
-						fault_start_time = 0;
+						fault_start_time[mtr] = 0;
 						mc_interface_fault_stop(FAULT_CODE_ENCODER_SLIP, is_second_motor, false);
 					}
 				} else {
-					fault_start_time = 0;
+					fault_start_time[mtr] = 0;
+				}
+
+				if (gap > 90.0f) {
+					if (big_fault_start_time[mtr] == 0){
+						big_fault_start_time[mtr] = chVTGetSystemTime();
+					}
+					uint32_t elapsed_ms = ST2MS(chVTTimeElapsedSinceX(big_fault_start_time[mtr]));
+					if (elapsed_ms > 50) {
+						big_fault_start_time[mtr] = 0;
+						mc_interface_fault_stop(FAULT_CODE_ENCODER_SLIP, is_second_motor, false);
+					}
+				} else {
+					big_fault_start_time[mtr] = 0;
 				}
 			} else {
-				fault_start_time = 0;
+				big_fault_start_time[mtr] = 0;
+				fault_start_time[mtr] = 0;
 			}
+		} else {
+			big_fault_start_time[mtr] = 0;
+			fault_start_time[mtr] = 0;
 		}
 	}
 }
