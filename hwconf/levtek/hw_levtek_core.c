@@ -128,6 +128,10 @@ void hw_init_gpio(void) {
 	palSetPadMode(GPIOC, 3, PAL_MODE_INPUT_ANALOG);
 	palSetPadMode(GPIOC, 4, PAL_MODE_INPUT_ANALOG);
 
+	//Jetson pullup on LESC 1
+	palSetPadMode(GPIOB, 11, PAL_MODE_OUTPUT_PUSHPULL);
+	palSetPad(GPIOB, 11);
+
 	// DAC as voltage reference for shunt amps
 	palSetPadMode(GPIOA, 4, PAL_MODE_INPUT_ANALOG);
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_DAC, ENABLE);
