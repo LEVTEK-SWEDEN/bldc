@@ -311,6 +311,9 @@
 #ifndef MCCONF_FOC_SAMPLE_V0_V7
 #define MCCONF_FOC_SAMPLE_V0_V7			false	// Run control loop in both v0 and v7 (requires phase shunts)
 #endif
+#ifndef APPCONF_APP_TO_USE
+#define APPCONF_APP_TO_USE				APP_NONE	// Keep UART app off so PB11 stays a driven output
+#endif
 
 // Setting limits
 #define HW_LIM_CURRENT			-120.0, 120.0
