@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bldc-tools"
+version = "0.0.1"
+description = "Python helper scripts for the LEVTEK bldc firmware build."
+requires-python = ">=3.10"
+
+# heatshrink2 is only needed by pack_firmware_ota.py, and only for images larger
+# than the bootloader's staging area -- which is every real build. Pinned so CI
+# and developer machines emit byte-identical packed images.
+dependencies = [
+    "heatshrink2==0.14.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.4.1",
+]
+
+# Flat layout: name the modules explicitly so setuptools does not try to
+# auto-discover packages from the firmware source tree.
+[tool.setuptools]
+py-modules = ["pack_firmware_ota"]
