@@ -51,6 +51,25 @@ A packed image stays loadable by VESC Tool, which unpacks it transparently — s
 flashing one by hand is a good way to confirm the packing before any OTA code is
 involved.
 
+### Recovering the raw image
+
+CI publishes the packed image, so recovering a bricked board over SWD needs the
+raw one back:
+
+```bash
+./pack_firmware_ota.py --unpack levtek_1_0_3_packed.bin recovered.bin
+```
+
+This reproduces the original build byte for byte. Unpacking refuses anything whose
+header or CRC does not check out, rather than emitting garbage.
+
+### In CI
+
+`cloudbuild.yaml` runs the pack step between the build and the Artifact Registry
+upload, writing to `build/packed/<board>.bin` and publishing that. The artifact
+keeps the basename `<board>.bin` — only the contents change — so nothing
+downstream has to learn a new file name.
+
 ### Tests
 
 ```bash

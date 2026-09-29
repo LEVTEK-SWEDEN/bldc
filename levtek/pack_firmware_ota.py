@@ -23,6 +23,10 @@ rather than a fallback.
 
 Usage:
     ./pack_firmware_ota.py ../build/levtek_1_0_3/levtek_1_0_3.bin packed.bin
+    ./pack_firmware_ota.py --unpack packed.bin recovered.bin
+
+Unpacking exists because CI publishes the packed image: recovering a bricked
+board over SWD needs the raw one back.
 
 Requires: pip install heatshrink2
 """
@@ -104,28 +108,68 @@ def describe(raw: bytes, packed: bytes) -> str:
     return f"stored uncompressed, {payload_len} bytes fits the {STAGING_MAX}-byte staging area"
 
 
+def unpack(packed: bytes) -> bytes:
+    """Recover the original image from a packed one.
+
+    The inverse of pack(). CI publishes the packed image, so this is how you get
+    back to something an ST-Link can flash when a board needs recovering.
+    """
+    if len(packed) <= HEADER_LEN:
+        raise PackError(f"not a packed image: only {len(packed)} bytes")
+
+    size_field, crc = struct.unpack(">IH", packed[:HEADER_LEN])
+    payload = packed[HEADER_LEN:]
+
+    if (size_field & 0x00FFFFFF) != len(payload):
+        raise PackError(
+            f"not a packed image: header declares {size_field & 0x00FFFFFF} payload bytes, found {len(payload)}"
+        )
+    if crc != crc_hqx(payload, 0):
+        raise PackError("not a packed image: header CRC does not match the payload")
+
+    if (size_field >> 24) != COMPRESSED_MARKER:
+        return payload
+
+    try:
+        import heatshrink2
+    except ImportError as e:  # pragma: no cover - environment problem, not logic
+        raise PackError(f"{e}. Install it with: pip install heatshrink2") from e
+
+    return heatshrink2.decompress(payload, window_sz2=WINDOW_SZ2, lookahead_sz2=LOOKAHEAD_SZ2)
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) != 3:
-        sys.stderr.write(f"usage: {argv[0]} <firmware.bin> <packed.bin>\n")
+    args = [a for a in argv[1:] if a != "--unpack"]
+    unpacking = "--unpack" in argv[1:]
+
+    if len(args) != 2:
+        sys.stderr.write(
+            f"usage: {argv[0]} <firmware.bin> <packed.bin>\n"
+            f"       {argv[0]} --unpack <packed.bin> <firmware.bin>\n"
+        )
         return 2
 
-    with open(argv[1], "rb") as f:
-        raw = f.read()
+    with open(args[0], "rb") as f:
+        data = f.read()
 
-    if not raw:
-        sys.stderr.write(f"{argv[1]} is empty\n")
+    if not data:
+        sys.stderr.write(f"{args[0]} is empty\n")
         return 1
 
     try:
-        packed = pack(raw)
+        result = unpack(data) if unpacking else pack(data)
     except PackError as e:
         sys.stderr.write(f"error: {e}\n")
         return 1
 
-    with open(argv[2], "wb") as f:
-        f.write(packed)
+    with open(args[1], "wb") as f:
+        f.write(result)
 
-    sys.stderr.write(f"{describe(raw, packed)}\nwrote {argv[2]} ({len(packed)} bytes)\n")
+    if unpacking:
+        sys.stderr.write(f"unpacked {len(data)} -> {len(result)} bytes\n")
+    else:
+        sys.stderr.write(f"{describe(data, result)}\n")
+    sys.stderr.write(f"wrote {args[1]} ({len(result)} bytes)\n")
     return 0
 
 
