@@ -61,6 +61,7 @@ from pack_firmware_ota import (
     PackError,
     WINDOW_SZ2,
     pack,
+    unpack as unpack_image,
 )
 
 HS_DECODE = os.environ.get("HS_DECODE")
@@ -129,6 +130,37 @@ def test_image_over_the_threshold_is_compressed():
     # 524280 is what objcopy emits for every board built from ld_eeprom_emu.ld.
     _, compressed = check_image(synthetic_firmware(524280))
     assert compressed
+
+
+def test_unpack_round_trips_a_compressed_image():
+    raw = synthetic_firmware(524280)
+    assert unpack_image(pack(raw)) == raw
+
+
+def test_unpack_round_trips_an_uncompressed_image():
+    raw = b"\x5a" * 2048
+    assert unpack_image(pack(raw)) == raw
+
+
+def test_unpack_rejects_a_corrupt_payload():
+    packed = bytearray(pack(synthetic_firmware(524280)))
+    packed[-1] ^= 0xFF
+    try:
+        unpack_image(bytes(packed))
+    except PackError as e:
+        assert "CRC" in str(e)
+    else:
+        raise AssertionError("expected PackError for a payload that fails its CRC")
+
+
+def test_unpack_rejects_a_raw_image():
+    """A raw .bin has no valid header, so unpacking must refuse rather than emit garbage."""
+    try:
+        unpack_image(synthetic_firmware(4096))
+    except PackError as e:
+        assert "not a packed image" in str(e)
+    else:
+        raise AssertionError("expected PackError for an unpacked input")
 
 
 def test_incompressible_oversize_image_is_rejected():

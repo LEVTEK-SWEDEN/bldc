@@ -14,7 +14,32 @@ steps:
         make arm_sdk_install
         make fw_${_BOARD}
 
-  # Upload build/<board>/<board>.bin to Artifact Registry.
+  # Pack the image for OTA. levkart-ota stages firmware in the bootloader's
+  # new-app area, which is 393216 bytes, while objcopy emits 524280 (the linker
+  # keeps .crcinfo at a fixed high address). Anything over the threshold has to be
+  # heatshrink-compressed and given a size + CRC16 header -- the same transform
+  # VESC Tool's --packFirmware applies. See levtek/README.md.
+  #
+  # Written under build/ (already gitignored) so no new ignore rules are
+  # needed at the repo root. The artifact keeps the basename <board>.bin; only
+  # the file's contents change. VESC Tool loads a packed image
+  # transparently, and `pack_firmware_ota.py --unpack` recovers the raw one for
+  # SWD flashing.
+  - name: 'python:3.12-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        # Installing the package rather than heatshrink2 directly keeps the
+        # version pin in levtek/pyproject.toml as the single source of truth.
+        pip install --quiet --no-cache-dir ./levtek
+        mkdir -p build/packed
+        python3 levtek/pack_firmware_ota.py \
+          build/${_BOARD}/${_BOARD}.bin \
+          build/packed/${_BOARD}.bin
+
+  # Upload build/packed/<board>.bin to Artifact Registry.
   # Branch builds go to levtek-binary; tag builds go to levtek-binary-release.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
@@ -37,7 +62,7 @@ steps:
           --repository=$$REPO \
           --package=${_PACKAGE} \
           --version=$$VERSION \
-          --source=build/${_BOARD}/${_BOARD}.bin
+          --source=build/packed/${_BOARD}.bin
 
 serviceAccount: 'projects/levtek-infrastructure/serviceAccounts/cloudbuild-ci@levtek-infrastructure.iam.gserviceaccount.com'
 
