@@ -17,8 +17,9 @@ flagging it with `0xCC` in the top byte of the size field; the bootloader
 decompresses on the way in. That path is not gated on any capability check, so it
 is the normal case rather than a fallback.
 
-`pack_firmware_ota.py` is the headless equivalent of VESC Tool's `--packFirmware`,
-so CI can produce an OTA-ready image without pulling in Qt.
+`pack_firmware_ota.py` is a dependency-free equivalent of VESC Tool's
+`--packFirmware`, for local use, for recovering a raw image, and as the independent
+check on what CI produces. CI itself packs with VESC Tool — see [In CI](#in-ci).
 
 ### Setup
 
@@ -65,10 +66,32 @@ header or CRC does not check out, rather than emitting garbage.
 
 ### In CI
 
-`cloudbuild.yaml` runs the pack step between the build and the Artifact Registry
-upload, writing to `build/packed/<board>.bin` and publishing that. The artifact
-keeps the basename `<board>.bin` — only the contents change — so nothing
-downstream has to learn a new file name.
+`cloudbuild.yaml` builds every board in `_BOARDS` (`levtek_1_0_3 levtek_1_0_4`) and packs
+each one with **VESC Tool**, not with this script: it downloads `vesc_tool_<version>` from
+Artifact Registry and runs `--packFirmware in.bin:out.bin`, so the reference
+implementation of the format is the one producing the artifact. The same pattern
+`levkart-esc-software` already uses for conf generation.
+
+A following step then unpacks that output with `pack_firmware_ota.py --unpack` and
+requires the result to match the image just built. That independent check is what
+makes using an opaque prebuilt binary safe — if the two implementations ever
+disagree, whether from a vesc_tool upgrade changing the format, a truncated
+download or a codec-parameter change, the build fails instead of shipping an image
+the bootloader cannot decompress.
+
+Each result is written to `build/packed/<board>.bin` and published from there. The
+artifacts keep the basename `<board>.bin` — only the contents change — so nothing
+downstream has to learn a new file name. Both boards go into the same
+`levkart-esc-firmware` package under one version, distinguished by that basename, so a
+consumer has to pick the file matching the board it is flashing.
+
+`_VESC_TOOL_VERSION` is pinned deliberately: the format is fixed by the bootloader
+on the boards, not by whatever is newest upstream, so tracking upstream
+automatically would be the wrong default.
+
+Verified byte-identical: `vesc_tool 7.00 --packFirmware` and `pack_firmware_ota.py`
+produce the same sha256 for a real build. So this script remains a faithful stand-in for
+local use and recovery.
 
 ### Tests
 
@@ -90,6 +113,7 @@ has the build line.
   bootloader that lives in a different repo. The round-trip check only proves the
   encoder and decoder agree in Python — confirm against hardware by flashing a
   packed image with VESC Tool.
-- Headroom on `levtek_1_0_3` is currently ~45 KB (11.5%). It shrinks as the
-  firmware grows, and the failure mode is a hard wall at build time with no
-  workaround short of shrinking the firmware.
+- Headroom is currently ~45 KB (11.5%) on both boards — 348199 bytes packed for
+  `levtek_1_0_3` and 348124 for `levtek_1_0_4`, against a 393208-byte limit. It shrinks as
+  the firmware grows, and the failure mode is a hard wall at build time with no workaround
+  short of shrinking the firmware.
