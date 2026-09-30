@@ -17,8 +17,9 @@ flagging it with `0xCC` in the top byte of the size field; the bootloader
 decompresses on the way in. That path is not gated on any capability check, so it
 is the normal case rather than a fallback.
 
-`pack_firmware_ota.py` is the headless equivalent of VESC Tool's `--packFirmware`,
-so CI can produce an OTA-ready image without pulling in Qt.
+`pack_firmware_ota.py` is a dependency-free equivalent of VESC Tool's
+`--packFirmware`, for local use, for recovering a raw image, and as the independent
+check on what CI produces. CI itself packs with VESC Tool — see [In CI](#in-ci).
 
 ### Setup
 
@@ -65,10 +66,30 @@ header or CRC does not check out, rather than emitting garbage.
 
 ### In CI
 
-`cloudbuild.yaml` runs the pack step between the build and the Artifact Registry
-upload, writing to `build/packed/<board>.bin` and publishing that. The artifact
-keeps the basename `<board>.bin` — only the contents change — so nothing
+`cloudbuild.yaml` packs with **VESC Tool**, not with this script: it downloads
+`vesc_tool_<version>` from Artifact Registry and runs
+`--packFirmware in.bin:out.bin`, so the reference implementation of the format is
+the one producing the artifact. The same pattern `levkart-esc-software` already
+uses for conf generation.
+
+A following step then unpacks that output with `pack_firmware_ota.py --unpack` and
+requires the result to match the image just built. That independent check is what
+makes using an opaque prebuilt binary safe — if the two implementations ever
+disagree, whether from a vesc_tool upgrade changing the format, a truncated
+download or a codec-parameter change, the build fails instead of shipping an image
+the bootloader cannot decompress.
+
+The result is written to `build/packed/<board>.bin` and published from there. The
+artifact keeps the basename `<board>.bin` — only the contents change — so nothing
 downstream has to learn a new file name.
+
+`_VESC_TOOL_VERSION` is pinned deliberately: the format is fixed by the bootloader
+on the boards, not by whatever is newest upstream, so tracking upstream
+automatically would be the wrong default.
+
+Verified byte-identical: `vesc_tool 7.00 --packFirmware` and `pack_firmware_ota.py`
+produce the same sha256 for a real `levtek_1_0_3` build. So this script remains a
+faithful stand-in for local use and recovery.
 
 ### Tests
 

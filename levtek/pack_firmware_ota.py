@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """Pack a built firmware .bin into the layout the bootloader's new-app area expects.
 
-This is the headless equivalent of VESC Tool's ``--packFirmware`` (vesc_tool
-main.cpp:807-868), so CI can produce an OTA-ready image without pulling in Qt.
-levkart-ota then uploads the result over CAN essentially verbatim.
+This is a dependency-free equivalent of VESC Tool's ``--packFirmware`` (vesc_tool
+main.cpp:807-868). Cloud Build packs with VESC Tool itself, since that is the
+reference implementation of the format; this module is what independently verifies
+that output, what recovers a raw image with --unpack, and what developers use
+locally without needing the Qt binary and its shared libraries.
+
+Verified byte-identical to ``vesc_tool 7.00 --packFirmware`` on a real
+levtek_1_0_3 build (same sha256).
 
 Layout, matching what the bootloader reads from the start of the new-app area
 (see libcanard/canard_driver.c:1041-1080, which builds the same header):
