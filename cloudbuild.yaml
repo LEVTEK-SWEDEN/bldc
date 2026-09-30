@@ -14,7 +14,82 @@ steps:
         make arm_sdk_install
         make fw_${_BOARD}
 
-  # Upload build/<board>/<board>.bin to Artifact Registry.
+  # Fetch the VESC Tool CLI from Artifact Registry. Same pattern as
+  # levkart-esc-software, which already runs it in Cloud Build for conf generation.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -ex
+        mkdir -p /workspace/tools-bin
+        gcloud artifacts generic download \
+          --project=$PROJECT_ID \
+          --location=${_LOCATION} \
+          --repository=levtek-binary \
+          --package=vesc_tool \
+          --version=${_VESC_TOOL_VERSION} \
+          --destination=/workspace/tools-bin
+        chmod +x /workspace/tools-bin/vesc_tool_${_VESC_TOOL_VERSION}
+
+  # Pack the image for OTA. levkart-ota stages firmware in the bootloader's
+  # new-app area, which is 393216 bytes, while objcopy emits 524280 (the linker
+  # keeps .crcinfo at a fixed high address). Anything over the threshold has to be
+  # heatshrink-compressed and given a size + CRC16 header. See levtek/README.md.
+  #
+  # VESC Tool is the reference implementation of that format, so use it directly
+  # rather than a reimplementation that could drift from it.
+  #
+  # Written under build/ (already gitignored) so no new ignore rules are needed at
+  # the repo root. The artifact keeps the basename <board>.bin; only the file's
+  # contents change, and VESC Tool loads a packed image transparently.
+  - name: 'ubuntu:22.04'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        apt-get update -qq
+        # vesc_tool's NEEDED list (Qt itself is statically linked into it).
+        # Taken from levkart-esc-software's cloudbuild, where it is already proven.
+        apt-get install -y --no-install-recommends ca-certificates \
+          libsdl2-2.0-0 libsm6 libice6 libxcb1 libxcb-icccm4 libxcb-image0 libxcb-shm0 libxcb-keysyms1 \
+          libxcb-randr0 libxcb-render-util0 libxcb-sync1 libxcb-xfixes0 libxcb-render0 libxcb-shape0 \
+          libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 libxkbcommon0 libegl1 libgles2 libdbus-1-3 libudev1
+        # Surface any shared libraries vesc_tool still misses before we invoke it.
+        ldd /workspace/tools-bin/vesc_tool_${_VESC_TOOL_VERSION} | grep 'not found' || true
+        export QT_QPA_PLATFORM=offscreen
+        mkdir -p build/packed
+        /workspace/tools-bin/vesc_tool_${_VESC_TOOL_VERSION} --packFirmware \
+          build/${_BOARD}/${_BOARD}.bin:build/packed/${_BOARD}.bin
+        test -s build/packed/${_BOARD}.bin
+
+  # Independently verify what vesc_tool produced: unpack it with our own
+  # implementation and require the result to match the image we just built.
+  #
+  # This is the check that makes using an opaque prebuilt binary safe. If the two
+  # implementations ever disagree -- a vesc_tool upgrade changing the format, a
+  # truncated download, a codec-parameter change -- the build fails here instead of
+  # shipping an image the bootloader cannot decompress. It also keeps
+  # pack_firmware_ota.py honest, which matters because --unpack is how a bricked
+  # board's raw image is recovered for SWD flashing.
+  - name: 'python:3.12-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        # Installing the package rather than heatshrink2 directly keeps the
+        # version pin in levtek/pyproject.toml as the single source of truth.
+        pip install --quiet --no-cache-dir ./levtek
+        python3 levtek/pack_firmware_ota.py --unpack \
+          build/packed/${_BOARD}.bin \
+          build/packed/${_BOARD}-roundtrip.bin
+        cmp build/${_BOARD}/${_BOARD}.bin build/packed/${_BOARD}-roundtrip.bin
+        rm -f build/packed/${_BOARD}-roundtrip.bin
+        echo "verified: packed image unpacks byte-identical to the build output"
+
+  # Upload build/packed/<board>.bin to Artifact Registry.
   # Branch builds go to levtek-binary; tag builds go to levtek-binary-release.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
@@ -37,7 +112,7 @@ steps:
           --repository=$$REPO \
           --package=${_PACKAGE} \
           --version=$$VERSION \
-          --source=build/${_BOARD}/${_BOARD}.bin
+          --source=build/packed/${_BOARD}.bin
 
 serviceAccount: 'projects/levtek-infrastructure/serviceAccounts/cloudbuild-ci@levtek-infrastructure.iam.gserviceaccount.com'
 
@@ -45,6 +120,10 @@ substitutions:
   _LOCATION: europe-west4
   _BOARD: levtek_1_0_3
   _PACKAGE: levkart-esc-firmware
+  # The packing format is fixed by the bootloader on the boards, not by whatever
+  # is newest upstream, so this is pinned deliberately. Bumping it needs the
+  # verification step below to still pass, and ideally a hand-flash check.
+  _VESC_TOOL_VERSION: '7.00'
 
 options:
   logging: CLOUD_LOGGING_ONLY
