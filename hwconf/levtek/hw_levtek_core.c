@@ -51,12 +51,21 @@ void hw_init_gpio(void) {
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
 
 	// LEDs
+#ifdef HW_LEVTEK_1_0_3
 	palSetPadMode(GPIOB, 0,
 			PAL_MODE_OUTPUT_PUSHPULL |
 			PAL_STM32_OSPEED_HIGHEST);
 	palSetPadMode(GPIOB, 1,
 			PAL_MODE_OUTPUT_PUSHPULL |
 			PAL_STM32_OSPEED_HIGHEST);
+#else
+	palSetPadMode(GPIOC, 6,
+			PAL_MODE_OUTPUT_PUSHPULL |
+			PAL_STM32_OSPEED_HIGHEST);
+	palSetPadMode(GPIOC, 7,
+			PAL_MODE_OUTPUT_PUSHPULL |
+			PAL_STM32_OSPEED_HIGHEST);
+#endif
 
 	// ENABLE_GATE
 	palSetPadMode(GPIOB, 5,
@@ -93,10 +102,12 @@ void hw_init_gpio(void) {
 			PAL_STM32_OSPEED_HIGHEST |
 			PAL_STM32_PUDR_FLOATING);
 
-	// Hall sensors
+	// Hall sensors (1.0.3 only; 1.0.4 uses these pins for LEDs and encoder NSS)
+#ifdef HW_LEVTEK_1_0_3
 	palSetPadMode(HW_HALL_ENC_GPIO1, HW_HALL_ENC_PIN1, PAL_MODE_INPUT_PULLUP);
 	palSetPadMode(HW_HALL_ENC_GPIO2, HW_HALL_ENC_PIN2, PAL_MODE_INPUT_PULLUP);
 	palSetPadMode(HW_HALL_ENC_GPIO3, HW_HALL_ENC_PIN3, PAL_MODE_INPUT_PULLUP);
+#endif
 
 	// Phase filters
 #ifdef PHASE_FILTER_GPIO
@@ -106,10 +117,12 @@ void hw_init_gpio(void) {
 	PHASE_FILTER_OFF();
 #endif
 
-	// Sensor port voltage
+	// Sensor port voltage (1.0.3 only; PC14 is left as an input on 1.0.4)
+#ifdef HW_LEVTEK_1_0_3
 	SENSOR_PORT_3V3();
 	palSetPadMode(SENSOR_VOLTAGE_GPIO, SENSOR_VOLTAGE_PIN,
 			PAL_MODE_OUTPUT_PUSHPULL | PAL_STM32_OSPEED_HIGHEST);
+#endif
 
 	// Fault pin
 	palSetPadMode(GPIOB, 7, PAL_MODE_INPUT_PULLUP);
@@ -119,8 +132,13 @@ void hw_init_gpio(void) {
 	palSetPadMode(GPIOA, 1, PAL_MODE_INPUT_ANALOG);
 	palSetPadMode(GPIOA, 2, PAL_MODE_INPUT_ANALOG);
 	palSetPadMode(GPIOA, 3, PAL_MODE_INPUT_ANALOG);
+#ifdef HW_LEVTEK_1_0_3
 	palSetPadMode(GPIOA, 5, PAL_MODE_INPUT_ANALOG);
 	palSetPadMode(GPIOA, 6, PAL_MODE_INPUT_ANALOG);
+#else
+	palSetPadMode(GPIOB, 0, PAL_MODE_INPUT_ANALOG);
+	palSetPadMode(GPIOB, 1, PAL_MODE_INPUT_ANALOG);
+#endif
 
 	palSetPadMode(GPIOC, 0, PAL_MODE_INPUT_ANALOG);
 	palSetPadMode(GPIOC, 1, PAL_MODE_INPUT_ANALOG);
@@ -159,14 +177,22 @@ void hw_setup_adc_channels(void) {
 	// ADC1 regular channels
 	ADC_RegularChannelConfig(ADC1, ADC_Channel_10, 1, t_samp);
 	ADC_RegularChannelConfig(ADC1, ADC_Channel_0, 2, t_samp);
+#ifdef HW_LEVTEK_1_0_3
 	ADC_RegularChannelConfig(ADC1, ADC_Channel_5, 3, t_samp);
+#else
+	ADC_RegularChannelConfig(ADC1, ADC_Channel_8, 3, t_samp);
+#endif
 	ADC_RegularChannelConfig(ADC1, ADC_Channel_14, 4, t_samp);
 	ADC_RegularChannelConfig(ADC1, ADC_Channel_Vrefint, 5, t_samp);
 
 	// ADC2 regular channels
 	ADC_RegularChannelConfig(ADC2, ADC_Channel_11, 1, t_samp);
 	ADC_RegularChannelConfig(ADC2, ADC_Channel_1, 2, t_samp);
+#ifdef HW_LEVTEK_1_0_3
 	ADC_RegularChannelConfig(ADC2, ADC_Channel_6, 3, t_samp);
+#else
+	ADC_RegularChannelConfig(ADC2, ADC_Channel_9, 3, t_samp);
+#endif
 	ADC_RegularChannelConfig(ADC2, ADC_Channel_15, 4, t_samp);
 	ADC_RegularChannelConfig(ADC2, ADC_Channel_0, 5, t_samp);
 

@@ -20,11 +20,17 @@
 #ifndef HW_LEVTEK_CORE_H_
 #define HW_LEVTEK_CORE_H_
 
+// Board revision. The 1.0.4 wiring is the default; the thin
+// hw_levtek_1_0_3.h defines HW_LEVTEK_1_0_3 for the old board.
+#ifdef HW_LEVTEK_1_0_3
 #define HW_NAME					"LEVTEK_1_0_3"
-
-
 #define HW_MAJOR				1
 #define HW_MINOR				3
+#else
+#define HW_NAME					"LEVTEK_1_0_4"
+#define HW_MAJOR				1
+#define HW_MINOR				4
+#endif
 
 // HW properties
 #define HW_HAS_DRV8301
@@ -38,10 +44,17 @@
 #define DCCAL_OFF()
 #define IS_DRV_FAULT()			(!palReadPad(GPIOB, 7))
 
+#ifdef HW_LEVTEK_1_0_3
 #define LED_GREEN_ON()			palSetPad(GPIOB, 0)
 #define LED_GREEN_OFF()			palClearPad(GPIOB, 0)
 #define LED_RED_ON()			palSetPad(GPIOB, 1)
 #define LED_RED_OFF()			palClearPad(GPIOB, 1)
+#else
+#define LED_GREEN_ON()			palSetPad(GPIOC, 6)
+#define LED_GREEN_OFF()			palClearPad(GPIOC, 6)
+#define LED_RED_ON()			palSetPad(GPIOC, 7)
+#define LED_RED_OFF()			palClearPad(GPIOC, 7)
+#endif
 
 #define CURRENT_FILTER_ON()		palSetPad(GPIOD, 2)
 #define CURRENT_FILTER_OFF()	palClearPad(GPIOD, 2)
@@ -52,7 +65,8 @@
 #define PHASE_FILTER_ON()		palSetPad(PHASE_FILTER_GPIO, PHASE_FILTER_PIN)
 #define PHASE_FILTER_OFF()		palClearPad(PHASE_FILTER_GPIO, PHASE_FILTER_PIN)
 
-// Sensor port voltage control
+// Sensor port voltage control (1.0.3 only; on 1.0.4 PC14 is a spare GPIO on J3)
+#ifdef HW_LEVTEK_1_0_3
 #define SENSOR_VOLTAGE_GPIO		GPIOC
 #define SENSOR_VOLTAGE_PIN		14
 
@@ -60,6 +74,7 @@
 // Disable 5V sensor port to avoid damaging encoders
 #define SENSOR_PORT_5V()		palClearPad(SENSOR_VOLTAGE_GPIO, SENSOR_VOLTAGE_PIN)
 #define SENSOR_PORT_3V3()		palClearPad(SENSOR_VOLTAGE_GPIO, SENSOR_VOLTAGE_PIN)
+#endif
 
 // Shutdown pin
 #define HW_SHUTDOWN_GPIO		GPIOC
@@ -85,8 +100,8 @@
  * 3:	IN10	CURR1
  * 4:	IN11	CURR2
  * 5:	IN12	CURR3
- * 6:	IN5		ADC_EXT1
- * 7:	IN6		ADC_EXT2
+ * 6:	IN8		ADC_EXT1 (IN5 on 1.0.3)
+ * 7:	IN9		ADC_EXT2 (IN6 on 1.0.3)
  * 8:	IN3		TEMP_PCB
  * 9:	IN14	TEMP_MOTOR
  * 10:	IN15	ADC_EXT3, Shutdown on MK3
@@ -191,10 +206,17 @@
 #endif
 
 // COMM-port ADC GPIOs
+#ifdef HW_LEVTEK_1_0_3
 #define HW_ADC_EXT_GPIO			GPIOA
 #define HW_ADC_EXT_PIN			5
 #define HW_ADC_EXT2_GPIO		GPIOA
 #define HW_ADC_EXT2_PIN			6
+#else
+#define HW_ADC_EXT_GPIO			GPIOB
+#define HW_ADC_EXT_PIN			0
+#define HW_ADC_EXT2_GPIO		GPIOB
+#define HW_ADC_EXT2_PIN			1
+#endif
 
 // UART Peripheral
 #define HW_UART_DEV				SD3
@@ -234,13 +256,23 @@
 #define HW_I2C_SDA_PORT			GPIOB
 #define HW_I2C_SDA_PIN			11
 
-// Hall/encoder pins
+// Hall/encoder pins. On 1.0.4 these are the encoder SPI pins
+// (SCK, MISO, NSS); hall and ABI sensor modes are not supported there.
+#ifdef HW_LEVTEK_1_0_3
 #define HW_HALL_ENC_GPIO1		GPIOC
 #define HW_HALL_ENC_PIN1		6
 #define HW_HALL_ENC_GPIO2		GPIOC
 #define HW_HALL_ENC_PIN2		7
 #define HW_HALL_ENC_GPIO3		GPIOC
 #define HW_HALL_ENC_PIN3		8
+#else
+#define HW_HALL_ENC_GPIO1		GPIOA
+#define HW_HALL_ENC_PIN1		5
+#define HW_HALL_ENC_GPIO2		GPIOA
+#define HW_HALL_ENC_PIN2		6
+#define HW_HALL_ENC_GPIO3		GPIOC
+#define HW_HALL_ENC_PIN3		8
+#endif
 #define HW_ENC_TIM				TIM3
 #define HW_ENC_TIM_AF			GPIO_AF_TIM3
 #define HW_ENC_TIM_CLK_EN()		RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE)
@@ -254,8 +286,13 @@
 // SPI pins
 #define HW_SPI_DEV				SPID1
 #define HW_SPI_GPIO_AF			GPIO_AF_SPI1
+#ifdef HW_LEVTEK_1_0_3
 #define HW_SPI_PORT_NSS			GPIOB
 #define HW_SPI_PIN_NSS			11
+#else
+#define HW_SPI_PORT_NSS			GPIOC
+#define HW_SPI_PIN_NSS			8
+#endif
 #define HW_SPI_PORT_SCK			GPIOA
 #define HW_SPI_PIN_SCK			5
 #define HW_SPI_PORT_MOSI		GPIOA
