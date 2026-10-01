@@ -17,9 +17,11 @@ steps:
         apt-get update -qq
         apt-get install -y --no-install-recommends ca-certificates make git wget xz-utils bzip2 python3
         make arm_sdk_install
-        make fw_${_BOARD}
+        for board in ${_BOARDS}; do
+          make fw_$$board
+        done
 
-  # Upload build/<board>/<board>.bin to Artifact Registry.
+  # Upload build/<board>/<board>.bin for each board to Artifact Registry.
   # Branch builds go to levtek-binary; tag builds go to levtek-binary-release.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
@@ -36,19 +38,21 @@ steps:
           SAFE_BRANCH=$(echo "$BRANCH_NAME" | tr '/_' '--')
           VERSION=$${SAFE_BRANCH}-$${SHA:0:11}
         fi
-        gcloud artifacts generic upload \
-          --project=$PROJECT_ID \
-          --location=${_LOCATION} \
-          --repository=$$REPO \
-          --package=${_PACKAGE} \
-          --version=$$VERSION \
-          --source=build/${_BOARD}/${_BOARD}.bin
+        for board in ${_BOARDS}; do
+          gcloud artifacts generic upload \
+            --project=$PROJECT_ID \
+            --location=${_LOCATION} \
+            --repository=$$REPO \
+            --package=${_PACKAGE} \
+            --version=$$VERSION \
+            --source=build/$$board/$$board.bin
+        done
 
 serviceAccount: 'projects/levtek-infrastructure/serviceAccounts/cloudbuild-ci@levtek-infrastructure.iam.gserviceaccount.com'
 
 substitutions:
   _LOCATION: europe-west4
-  _BOARD: levtek_1_0_3
+  _BOARDS: levtek_1_0_3 levtek_1_0_4
   _PACKAGE: levkart-esc-firmware
 
 options:
