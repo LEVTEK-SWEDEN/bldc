@@ -778,7 +778,7 @@ void encoder_check_faults(volatile mc_configuration *m_conf, bool is_second_moto
 		// Mechanical slip detection: Compare the FOC observer phase against the physical
 		// encoder phase. If the motor is spinning fast enough for a stable observer
 		// estimate (>110% of open-loop threshold) and the phase gap exceeds 90 degrees
-		// for more than 50ms trigger an ENCODER_SLIP fault.
+		// for more than 100ms trigger an ENCODER_SLIP fault.
 		static systime_t fault_start_time[2] = {0, 0};
 		int mtr = is_second_motor ? 1 : 0;
 
@@ -795,7 +795,7 @@ void encoder_check_faults(volatile mc_configuration *m_conf, bool is_second_moto
 						fault_start_time[mtr] = chVTGetSystemTime();
 					}
 					uint32_t elapsed_ms = ST2MS(chVTTimeElapsedSinceX(fault_start_time[mtr]));
-					if (elapsed_ms > 50) {
+					if (elapsed_ms > 100) {
 						fault_start_time[mtr] = 0;
 						mc_interface_fault_stop(FAULT_CODE_ENCODER_SLIP, is_second_motor, false);
 					}
