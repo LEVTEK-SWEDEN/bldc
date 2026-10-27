@@ -102,21 +102,43 @@ steps:
 
   # Upload build/packed/<board>.bin for each board to Artifact Registry.
   # Branch builds go to levtek-binary; tag builds go to levtek-binary-release.
+  #
+  # Both spellings end in -<sha11>, and that is load-bearing rather than cosmetic.
+  # A LESC reports its firmware identity over COMM_FW_INFO as the 40-char
+  # GIT_COMMIT_HASH and nothing else -- the branch name is deliberately not sent
+  # (comm/commands.c:1666) and USER_GIT_COMMIT_HASH is not defined by any build we
+  # ship, so the second string is always empty. levkart-ota verifies a flash by
+  # reading that hash back and matching it against the artifact version, so a
+  # version with no sha in it can never be confirmed. Publishing a tag build as the
+  # bare tag meant a successful flash was rejected, the install record cleared, and
+  # the whole fleet re-flashed on the next hourly check -- erasing the Lisp sectors
+  # each time round.
+  #
+  # Appending the sha here rather than teaching the firmware to report the tag is
+  # what makes this work on boards already in the field: they report the hash today
+  # and always have.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
         set -e
+        SHA=$COMMIT_SHA
+        if [ -z "$$SHA" ]; then
+          echo "COMMIT_SHA is empty; refusing to publish a version that cannot be" \
+               "checked against what a board reports" >&2
+          exit 1
+        fi
         if [ -n "$TAG_NAME" ]; then
           REPO=levtek-binary-release
-          VERSION=$TAG_NAME
+          TAG=$TAG_NAME
+          VERSION=$${TAG}-$${SHA:0:11}
         else
           REPO=levtek-binary
-          SHA=$COMMIT_SHA
           SAFE_BRANCH=$(echo "$BRANCH_NAME" | tr '/_' '--')
           VERSION=$${SAFE_BRANCH}-$${SHA:0:11}
         fi
+        echo "publishing ${_PACKAGE} version $$VERSION to $$REPO"
         for board in ${_BOARDS}; do
           gcloud artifacts generic upload \
             --project=$PROJECT_ID \
