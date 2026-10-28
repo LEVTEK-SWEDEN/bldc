@@ -19,6 +19,23 @@ steps:
         make arm_sdk_install
         for board in ${_BOARDS}; do
           make fw_$$board
+          # Prove the image really was built for the board it is about to be named
+          # after. HW_NAME (hwconf/levtek/hw_levtek_core.h) is compiled in and appears
+          # in the binary as org.vesc.<HW_NAME>, but the published artifact is
+          # heatshrink-compressed, so that string is gone by the time anything
+          # downstream sees it: the file name is the only thing left that says which
+          # board an image is for, and levkart-ota refuses to flash on any other basis.
+          # Nothing otherwise checks the name against the contents, so a divergence
+          # between the board selection and the output path would publish a correctly
+          # named image full of the wrong pin configuration -- onto a motor controller
+          # whose two revisions are not pin-compatible.
+          expected="org.vesc.$$(echo $$board | tr a-z A-Z)"
+          if ! grep -qa "$$expected" build/$$board/$$board.bin; then
+            echo "build/$$board/$$board.bin does not contain $$expected --" \
+                 "it was not built for $$board; refusing to publish it under that name" >&2
+            exit 1
+          fi
+          echo "verified: build/$$board/$$board.bin reports $$expected"
         done
 
   # Fetch the VESC Tool CLI from Artifact Registry. Same pattern as
