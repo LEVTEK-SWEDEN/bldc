@@ -39,8 +39,12 @@
 #include "crc.h"
 #include "terminal.h"
 #include "firmware_metadata.h"
+#ifdef USE_LISPBM
+#include "lispif.h"
+#endif
 
 #include <string.h>
+#include <stddef.h>
 #include <math.h>
 
 //#define TEST_BAD_MC_CRC
@@ -54,6 +58,20 @@
 #define EEPROM_BASE_MCCONF_2	5000
 #define EEPROM_BASE_BACKUP		6000
 
+#define CUSTOM_CARRY_INIT_CODE	0x4C45564B
+
+// The bootloader erases the emulated EEPROM together with the old app, but
+// leaves RAM4 alone. The custom variables are copied to RAM4 right before
+// jumping to the bootloader and written back by the new firmware on its first
+// boot. RAM4 has no room for a buffer of its own, so the carry borrows the
+// LispBM heap, which is dead at the jump and initialized after conf_general_init.
+typedef struct {
+	uint32_t init_flag;
+	uint32_t written[(EEPROM_VARS_CUSTOM + 31) / 32];
+	uint32_t vars[EEPROM_VARS_CUSTOM];
+	uint32_t crc;
+} custom_carry;
+
 // Global variables
 uint16_t VirtAddVarTab[NB_OF_VAR];
 bool conf_general_permanent_nrf_found = false;
@@ -62,6 +80,7 @@ __attribute__((section(".ram4"))) volatile backup_data g_backup;
 // Private functions
 static bool read_eeprom_var(eeprom_var *v, int address, uint16_t base);
 static bool store_eeprom_var(eeprom_var *v, int address, uint16_t base);
+static void restore_custom_carry(void);
 
 __attribute__((section(".text2"))) void conf_general_init(void) {
 	// First, make sure that all relevant virtual addresses are assigned for page swapping.
@@ -93,6 +112,8 @@ __attribute__((section(".text2"))) void conf_general_init(void) {
 			FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR);
 	EE_Init();
 	FLASH_Lock();
+
+	restore_custom_carry();
 
 	// Read backup data
 	bool is_ok = true;
@@ -324,6 +345,100 @@ __attribute__((section(".text2"))) static bool store_eeprom_var(eeprom_var *v, i
 	utils_sys_unlock_cnt();
 
 	return is_ok;
+}
+
+__attribute__((section(".text2"))) static volatile custom_carry *custom_carry_area(void) {
+#ifdef USE_LISPBM
+	size_t size;
+	void *area = lispif_carry_area(&size);
+	if (size >= sizeof(custom_carry)) {
+		return area;
+	}
+#endif
+	return 0;
+}
+
+__attribute__((section(".text2"))) static uint32_t custom_carry_crc(volatile custom_carry *c) {
+	return crc32_with_init((const uint8_t*)c, offsetof(custom_carry, crc), 0);
+}
+
+/**
+ * Copy the custom variables from emulated EEPROM to RAM4, so that the next
+ * firmware can restore them after the bootloader has erased the EEPROM. Call
+ * this from the jump to the bootloader, after the system has been disabled:
+ * the carry overwrites the LispBM heap.
+ */
+__attribute__((section(".text2"))) void conf_general_carry_custom_vars(void) {
+	volatile custom_carry *c = custom_carry_area();
+	if (!c) {
+		return;
+	}
+
+	c->init_flag = 0;
+
+	for (unsigned int i = 0;i < sizeof(c->written) / sizeof(c->written[0]);i++) {
+		c->written[i] = 0;
+	}
+
+	for (int i = 0;i < EEPROM_VARS_CUSTOM;i++) {
+		eeprom_var v;
+		if (read_eeprom_var(&v, i, EEPROM_BASE_CUSTOM)) {
+			c->vars[i] = v.as_u32;
+			c->written[i / 32] |= 1u << (i % 32);
+		} else {
+			c->vars[i] = 0;
+		}
+	}
+
+	c->init_flag = CUSTOM_CARRY_INIT_CODE;
+	c->crc = custom_carry_crc(c);
+}
+
+/*
+ * Write the custom variables carried in RAM4 back to an empty custom region.
+ * Runs once, from conf_general_init before the motor and LispBM are initialized.
+ */
+__attribute__((section(".text2"))) static void restore_custom_carry(void) {
+	volatile custom_carry *c = custom_carry_area();
+	if (!c || c->init_flag != CUSTOM_CARRY_INIT_CODE) {
+		return;
+	}
+
+	bool crc_ok = c->crc == custom_carry_crc(c);
+
+	// Use a carry at most once
+	c->init_flag = 0;
+
+	if (!crc_ok) {
+		return;
+	}
+
+	// If the bootloader didn't erase the EEPROM (no new app was written) the
+	// variables are still there, leave them as they are.
+	for (int i = 0;i < EEPROM_VARS_CUSTOM;i++) {
+		eeprom_var v;
+		if (read_eeprom_var(&v, i, EEPROM_BASE_CUSTOM)) {
+			return;
+		}
+	}
+
+	FLASH_Unlock();
+	FLASH_ClearFlag(FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR |
+			FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR);
+
+	for (int i = 0;i < EEPROM_VARS_CUSTOM;i++) {
+		if (!(c->written[i / 32] & (1u << (i % 32)))) {
+			continue;
+		}
+
+		uint32_t var = c->vars[i];
+		if (EE_WriteVariable(EEPROM_BASE_CUSTOM + i * 2, var >> 16) != FLASH_COMPLETE ||
+				EE_WriteVariable(EEPROM_BASE_CUSTOM + i * 2 + 1, var & 0xFFFF) != FLASH_COMPLETE) {
+			break;
+		}
+	}
+
+	FLASH_Lock();
 }
 
 /**
