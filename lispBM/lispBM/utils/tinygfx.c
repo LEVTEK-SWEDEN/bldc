@@ -24,6 +24,7 @@
 */
 
 #include "tinygfx.h"
+#include "tinyutils.h"
 #include "cos_table.h"
 
 #include <math.h>
@@ -39,13 +40,6 @@
 #endif
 #ifdef LBM_OPT_DISPLAY_EXTENSIONS_SIZE_AGGRESSIVE
 #pragma GCC optimize ("-Oz")
-#endif
-
-#ifndef MIN
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#endif
-#ifndef MAX
-#define MAX(a,b) (((a)>(b))?(a):(b))
 #endif
 
 ////////////////////////////////////////////////////////////
@@ -1022,8 +1016,8 @@ static void arc_thin_plot(image_buffer_t *img, int c_x, int c_y, int px, int py,
   if (full_circle) {
     inside = true;
   } else {
-    float cross0 = px * cap0_y - py * cap0_x;
-    float cross1 = px * cap1_y - py * cap1_x;
+    float cross0 = (float)px * cap0_y - (float)py * cap0_x;
+    float cross1 = (float)px * cap1_y - (float)py * cap1_x;
     bool inside0 = cross0 <= 0;
     bool inside1 = cross1 >= 0;
     inside = angle_is_closed ? (inside0 || inside1) : (inside0 && inside1);
@@ -1161,12 +1155,12 @@ static void arc_ring(image_buffer_t *img, int c_x, int c_y, int radius, float an
     }
 
     circle_row_draw(img, c_x, c_y, p->color, y0, x_out, x_out_r, has_gap, x_in, x_in_r,
-                    (float)angle0_cos * radius_outer, (float)angle0_sin * radius_outer,
-                    (float)angle1_cos * radius_outer, (float)angle1_sin * radius_outer,
+                    angle0_cos * (float)radius_outer, angle0_sin * (float)radius_outer,
+                    angle1_cos * (float)radius_outer, angle1_sin * (float)radius_outer,
                     angle_is_closed, filled_segment, full_circle);
     circle_row_draw(img, c_x, c_y, p->color, -y0 - 1, x_out, x_out_r, has_gap, x_in, x_in_r,
-                    (float)angle0_cos * radius_outer, (float)angle0_sin * radius_outer,
-                    (float)angle1_cos * radius_outer, (float)angle1_sin * radius_outer,
+                    angle0_cos * (float)radius_outer, angle0_sin * (float)radius_outer,
+                    angle1_cos * (float)radius_outer, angle1_sin * (float)radius_outer,
                     angle_is_closed, filled_segment, full_circle);
   }
 
@@ -1377,21 +1371,13 @@ void tinygfx_rounded_rectangle(image_buffer_t *img, int x, int y, int width, int
 ////////////////////////////////////////////////////////////
 //  TRIANGLES
 
-static inline void swap_points(int *x0, int *y0, int *x1, int *y1) {
-  int tx = *x0, ty = *y0;
-  *x0 = *x1; *y0 = *y1;
-  *x1 = tx;  *y1 = ty;
-}
-
 // Scanline fill:
 // See Black art of 3d game programming - André Lamothe for a good
 // introduction to scanline fill approaches.
 // The triangle filler in "Black art" explicitly splits triangles into subtriangles
 // and invents a "cut-vertex" along the long edge. Here the long edge state
 // is shared across the "implicitly" split up subtriangles saving some work.
-static inline int32_t tri_slope_fp(int32_t xa, int32_t xb, int32_t ya, int32_t yb) {
-  return (xb - xa) * 256 / (yb - ya);
-}
+// swap_points/tri_slope_fp are shared with tiny3d.c - see tinyutils.h.
 
 void tinygfx_fill_triangle(image_buffer_t *img, int x0, int y0,
                           int x1, int y1, int x2, int y2, uint32_t color) {
