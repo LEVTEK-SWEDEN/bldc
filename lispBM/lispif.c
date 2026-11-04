@@ -691,6 +691,16 @@ void lispif_stop(void) {
 	lispif_unlock_lbm();
 }
 
+/**
+ * RAM4 that holds nothing worth keeping once the system has stopped for the
+ * jump to the bootloader, and that is not touched again until lispif_init.
+ * Used to carry data over a firmware update.
+ */
+void *lispif_carry_area(size_t *size) {
+	*size = sizeof(heap);
+	return heap;
+}
+
 bool lispif_restart(bool print, bool load_code, bool load_imports) {
 	static lbm_string_channel_state_t string_tok_state;
 	static lbm_char_channel_t string_tok;

@@ -270,6 +270,9 @@ void flash_helper_jump_to_bootloader(void) {
 
 	chSysDisable();
 
+	// The bootloader erases the emulated EEPROM, keep the custom variables in RAM4
+	conf_general_carry_custom_vars();
+
 	pFunction jump_to_bootloader;
 
 	// Variable that will be loaded with the start address of the application
